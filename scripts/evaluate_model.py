@@ -105,7 +105,6 @@ def main():
     print_header = single_model_eval
     for dataset_name in args.datasets.split(','):
         dataset = utils.get_dataset(dataset_name, cfg)
-
         for checkpoint_path in checkpoints_list:
             model = utils.load_is_model(checkpoint_path, args.device, args.eval_ritm)
 

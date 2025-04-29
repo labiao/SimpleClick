@@ -16,7 +16,6 @@ class BraTSDataset(ISDataset):
         self.dataset_path = Path(dataset_path)
         self._images_path = self.dataset_path / images_dir_name
         self._insts_path = self.dataset_path / masks_dir_name
-
         self.dataset_samples = [x.name for x in sorted(self._images_path.glob('*.png'))]
         self._masks_paths = {x.stem: x for x in self._insts_path.glob('*.png')}
 

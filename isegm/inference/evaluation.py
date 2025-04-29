@@ -15,7 +15,6 @@ except NameError:
 
 def evaluate_dataset(dataset, predictor, **kwargs):
     all_ious = []
-
     start_time = time()
     for index in tqdm(range(len(dataset)), leave=False):
         sample = dataset.get_sample(index)
@@ -36,10 +35,8 @@ def evaluate_sample(image, gt_mask, predictor, max_iou_thr,
     clicker = Clicker(gt_mask=gt_mask)
     pred_mask = np.zeros_like(gt_mask)
     ious_list = []
-
     with torch.no_grad():
         predictor.set_input_image(image)
-
         for click_indx in range(max_clicks):
             clicker.make_next_click(pred_mask)
             pred_probs = predictor.get_prediction(clicker)

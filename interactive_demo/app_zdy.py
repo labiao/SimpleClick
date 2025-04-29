@@ -1,4 +1,9 @@
-import os
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# File  : app_zdy.py
+# Author: zdy
+# Date  : 2025/3/22
+
 import tkinter as tk
 from tkinter import messagebox, filedialog, ttk
 
@@ -6,9 +11,10 @@ import cv2
 import numpy as np
 import torch
 from PIL import Image
+import os
 
 from interactive_demo.canvas import CanvasImage
-from interactive_demo.controller import InteractiveController
+from interactive_demo.controller_zdy import InteractiveController
 from interactive_demo.wrappers import BoundedNumericalEntry, FocusHorizontalScale, FocusCheckButton, \
     FocusButton, FocusLabelFrame
 savepath=r'.\\mask\\'
@@ -17,7 +23,7 @@ class InteractiveDemoApp(ttk.Frame):
     def __init__(self, master, args, model):
         super().__init__(master)
         self.master = master
-        master.title("SimpleClick Demo")
+        master.title("前向反馈交互式标注")
         master.withdraw()
         master.update_idletasks()
         x = (master.winfo_screenwidth() - master.winfo_reqwidth()) / 2
@@ -58,15 +64,14 @@ class InteractiveDemoApp(ttk.Frame):
         self.state['zoomin_params']['expansion_ratio'].trace(mode='w', callback=self._reset_predictor)
         self.state['predictor_params']['net_clicks_limit'].trace(mode='w', callback=self._change_brs_mode)
         self.state['lbfgs_max_iters'].trace(mode='w', callback=self._change_brs_mode)
-        self._change_brs_mode()
+        self._reset_predictor()
 
     def _init_state(self):
         self.state = {
             'zoomin_params': {
                 'use_zoom_in': tk.BooleanVar(value=True),
-                'fixed_crop': tk.BooleanVar(value=True),
-                'skip_clicks': tk.IntVar(value=-1),
-                'target_size': tk.IntVar(value=448), #tk.IntVar(value=min(400, self.limit_longest_size)),
+                'skip_clicks': tk.IntVar(value=1),
+                'target_size': tk.IntVar(value=min(480, self.limit_longest_size)),
                 'expansion_ratio': tk.DoubleVar(value=1.4)
             },
 
@@ -85,19 +90,13 @@ class InteractiveDemoApp(ttk.Frame):
         self.menubar = FocusLabelFrame(self, bd=1)
         self.menubar.pack(side=tk.TOP, fill='x')
 
-        button = FocusButton(self.menubar, text='Load image', command=self._load_image_callback)
+        button = FocusButton(self.menubar, text='打开图像', command=self._load_image_callback)
         button.pack(side=tk.LEFT)
-        self.save_mask_btn = FocusButton(self.menubar, text='Save mask', command=self._save_mask_callback)
-        self.save_mask_btn.pack(side=tk.LEFT)
-        self.save_mask_btn.configure(state=tk.DISABLED)
-
-        self.load_mask_btn = FocusButton(self.menubar, text='Load mask', command=self._load_mask_callback)
-        self.load_mask_btn.pack(side=tk.LEFT)
-        self.load_mask_btn.configure(state=tk.DISABLED)
-
-        button = FocusButton(self.menubar, text='About', command=self._about_callback)
+        button = FocusButton(self.menubar, text='保存Mask', command=self._save_mask_callback)
         button.pack(side=tk.LEFT)
-        button = FocusButton(self.menubar, text='Exit', command=self.master.quit)
+        button = FocusButton(self.menubar, text='关于', command=self._about_callback)
+        button.pack(side=tk.LEFT)
+        button = FocusButton(self.menubar, text='退出', command=self.master.quit)
         button.pack(side=tk.LEFT)
 
     def _add_canvas(self):
@@ -116,32 +115,30 @@ class InteractiveDemoApp(ttk.Frame):
         self.control_frame.pack(side=tk.TOP, fill='x', padx=5, pady=5)
         master = self.control_frame
 
-        self.clicks_options_frame = FocusLabelFrame(master, text="Clicks management")
+        self.clicks_options_frame = FocusLabelFrame(master, text="点击操作")
         self.clicks_options_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=3)
         self.finish_object_button = \
-            FocusButton(self.clicks_options_frame, text='Finish\nobject', bg='#b6d7a8', fg='black', width=10, height=2,
+            FocusButton(self.clicks_options_frame, text='完成\n目标', bg='#b6d7a8', fg='black', width=10, height=2,
                         state=tk.DISABLED, command=self.controller.finish_object)
         self.finish_object_button.pack(side=tk.LEFT, fill=tk.X, padx=10, pady=3)
         self.undo_click_button = \
-            FocusButton(self.clicks_options_frame, text='Undo click', bg='#ffe599', fg='black', width=10, height=2,
+            FocusButton(self.clicks_options_frame, text='取消 点击', bg='#ffe599', fg='black', width=10, height=2,
                         state=tk.DISABLED, command=self.controller.undo_click)
         self.undo_click_button.pack(side=tk.LEFT, fill=tk.X, padx=10, pady=3)
         self.reset_clicks_button = \
-            FocusButton(self.clicks_options_frame, text='Reset clicks', bg='#ea9999', fg='black', width=10, height=2,
+            FocusButton(self.clicks_options_frame, text='还原 点击', bg='#ea9999', fg='black', width=10, height=2,
                         state=tk.DISABLED, command=self._reset_last_object)
         self.reset_clicks_button.pack(side=tk.LEFT, fill=tk.X, padx=10, pady=3)
 
         self.zoomin_options_frame = FocusLabelFrame(master, text="ZoomIn options")
         self.zoomin_options_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=3)
         FocusCheckButton(self.zoomin_options_frame, text='Use ZoomIn', command=self._reset_predictor,
-                         variable=self.state['zoomin_params']['use_zoom_in']).grid(row=0, column=0, padx=10)
-        FocusCheckButton(self.zoomin_options_frame, text='Fixed crop', command=self._reset_predictor,
-                         variable=self.state['zoomin_params']['fixed_crop']).grid(row=1, column=0, padx=10)
+                         variable=self.state['zoomin_params']['use_zoom_in']).grid(rowspan=3, column=0, padx=10)
         tk.Label(self.zoomin_options_frame, text="Skip clicks").grid(row=0, column=1, pady=1, sticky='e')
         tk.Label(self.zoomin_options_frame, text="Target size").grid(row=1, column=1, pady=1, sticky='e')
-        tk.Label(self.zoomin_options_frame, text="Expand ratio").grid(row=2, column=1, pady=1, sticky='e')
+        tk.Label(self.zoomin_options_frame, text="膨胀系数").grid(row=2, column=1, pady=1, sticky='e')
         BoundedNumericalEntry(self.zoomin_options_frame, variable=self.state['zoomin_params']['skip_clicks'],
-                              min_value=-1, max_value=None, vartype=int,
+                              min_value=0, max_value=None, vartype=int,
                               name='zoom_in_skip_clicks').grid(row=0, column=2, padx=10, pady=1, sticky='w')
         BoundedNumericalEntry(self.zoomin_options_frame, variable=self.state['zoomin_params']['target_size'],
                               min_value=100, max_value=self.limit_longest_size, vartype=int,
@@ -151,7 +148,7 @@ class InteractiveDemoApp(ttk.Frame):
                               name='zoom_in_expansion_ratio').grid(row=2, column=2, padx=10, pady=1, sticky='w')
         self.zoomin_options_frame.columnconfigure((0, 1, 2), weight=1)
 
-        self.brs_options_frame = FocusLabelFrame(master, text="BRS options")
+        self.brs_options_frame = FocusLabelFrame(master, text="BRS 选项")
         self.brs_options_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=3)
         menu = tk.OptionMenu(self.brs_options_frame, self.state['brs_mode'],
                              *self.brs_modes, command=self._change_brs_mode)
@@ -164,25 +161,23 @@ class InteractiveDemoApp(ttk.Frame):
                                                       min_value=0, max_value=None, vartype=int, allow_inf=True,
                                                       name='net_clicks_limit')
         self.net_clicks_entry.grid(row=0, column=2, padx=10, pady=2, sticky='w')
-        self.lbfgs_iters_label = tk.Label(self.brs_options_frame, text="L-BFGS\nmax iterations")
-        self.lbfgs_iters_label.grid(row=1, column=1, pady=2, sticky='e')
-        self.lbfgs_iters_entry = BoundedNumericalEntry(self.brs_options_frame, variable=self.state['lbfgs_max_iters'],
-                                                       min_value=1, max_value=1000, vartype=int,
-                                                       name='lbfgs_max_iters')
-        self.lbfgs_iters_entry.grid(row=1, column=2, padx=10, pady=2, sticky='w')
+        tk.Label(self.brs_options_frame, text="L-BFGS\n最大迭代次数").grid(row=1, column=1, pady=2, sticky='e')
+        BoundedNumericalEntry(self.brs_options_frame, variable=self.state['lbfgs_max_iters'],
+                              min_value=1, max_value=1000, vartype=int,
+                              name='lbfgs_max_iters').grid(row=1, column=2, padx=10, pady=2, sticky='w')
         self.brs_options_frame.columnconfigure((0, 1), weight=1)
 
-        self.prob_thresh_frame = FocusLabelFrame(master, text="Predictions threshold")
+        self.prob_thresh_frame = FocusLabelFrame(master, text="分割阈值")
         self.prob_thresh_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=3)
         FocusHorizontalScale(self.prob_thresh_frame, from_=0.0, to=1.0, command=self._update_prob_thresh,
                              variable=self.state['prob_thresh']).pack(padx=10)
 
-        self.alpha_blend_frame = FocusLabelFrame(master, text="Alpha blending coefficient")
+        self.alpha_blend_frame = FocusLabelFrame(master, text="Mask透明度")
         self.alpha_blend_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=3)
         FocusHorizontalScale(self.alpha_blend_frame, from_=0.0, to=1.0, command=self._update_blend_alpha,
                              variable=self.state['alpha_blend']).pack(padx=10, anchor=tk.CENTER)
 
-        self.click_radius_frame = FocusLabelFrame(master, text="Visualisation click radius")
+        self.click_radius_frame = FocusLabelFrame(master, text="点标注半径")
         self.click_radius_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=3)
         FocusHorizontalScale(self.click_radius_frame, from_=0, to=7, resolution=1, command=self._update_click_radius,
                              variable=self.state['click_radius']).pack(padx=10, anchor=tk.CENTER)
@@ -213,7 +208,6 @@ class InteractiveDemoApp(ttk.Frame):
 
     def _set_image(self, value):
         torch.cuda.empty_cache()
-        print(self.filenames, value)
         image = cv2.cvtColor(cv2.imread(self.filenames[value]), cv2.COLOR_BGR2RGB)
         self.filename = os.path.basename(self.filenames[value])
         self.controller.set_image(image)
@@ -242,48 +236,27 @@ class InteractiveDemoApp(ttk.Frame):
                 self._set_image(0)
 
     def _save_mask_callback(self):
+        print(8951,'save')
         self.menubar.focus_set()
-        print(self._check_entry(self),'111')
         if self._check_entry(self):
             mask = self.controller.result_mask
             if mask is None:
                 return
             if 0 < mask.max() < 256:
                 mask *= 255 // mask.max()
-                print(np.unique(mask))
             #filename = filedialog.asksaveasfilename(parent=self.master, initialfile='{}.png'.format(self.filename), filetypes=[
              #   ("PNG image", "*.png"),
               #  ("BMP image", "*.bmp"),
                # ("All files", "*.*"),
             #], title="Save current mask as...")
             filename=savepath+format(self.filename.split('.')[0])+'.png'
-            print(121313, filename)
+            print(121313,len(filename),filename)
 
             if len(filename) > 0:
                 if mask.max() < 256:
                     mask = mask.astype(np.uint8)
-                    print(np.unique(mask))
-                    mask *= 255 // mask.max()
-                    print(np.unique(mask))
+                print(233655)
                 cv2.imwrite(filename, mask)
-
-    def _load_mask_callback(self):
-        if not self.controller.net.with_prev_mask:
-            messagebox.showwarning("Warning", "The current model doesn't support loading external masks. "
-                                              "Please use ITER-M models for that purpose.")
-            return
-
-        self.menubar.focus_set()
-        if self._check_entry(self):
-            filename = filedialog.askopenfilename(parent=self.master, filetypes=[
-                ("Binary mask (png, bmp)", "*.png *.bmp"),
-                ("All files", "*.*"),
-            ], title="Chose an image")
-
-            if len(filename) > 0:
-                mask = cv2.imread(filename)[:, :, 0] > 127
-                self.controller.set_mask(mask)
-                self._update_image()
 
     def _about_callback(self):
         self.menubar.focus_set()
@@ -291,7 +264,7 @@ class InteractiveDemoApp(ttk.Frame):
         text = [
             "Developed by:",
             "K.Sofiiuk and I. Petrov",
-            "The MIT License, 2021"
+            "MPL-2.0 License, 2020"
         ]
 
         messagebox.showinfo("About Demo", '\n'.join(text))
@@ -320,19 +293,15 @@ class InteractiveDemoApp(ttk.Frame):
             self.net_clicks_entry.set('INF')
             self.net_clicks_entry.configure(state=tk.DISABLED)
             self.net_clicks_label.configure(state=tk.DISABLED)
-            self.lbfgs_iters_entry.configure(state=tk.DISABLED)
-            self.lbfgs_iters_label.configure(state=tk.DISABLED)
         else:
             if self.net_clicks_entry.get() == 'INF':
                 self.net_clicks_entry.set(8)
             self.net_clicks_entry.configure(state=tk.NORMAL)
             self.net_clicks_label.configure(state=tk.NORMAL)
-            self.lbfgs_iters_entry.configure(state=tk.NORMAL)
-            self.lbfgs_iters_label.configure(state=tk.NORMAL)
 
         self._reset_predictor()
 
-    def _reset_predictor(self, *args, **kwargs):
+    def _reset_predictor(self):
         brs_mode = self.state['brs_mode'].get()
         prob_thresh = self.state['prob_thresh'].get()
         net_clicks_limit = None if brs_mode == 'NoBRS' else self.state['predictor_params']['net_clicks_limit'].get()
@@ -343,8 +312,6 @@ class InteractiveDemoApp(ttk.Frame):
                 'target_size': self.state['zoomin_params']['target_size'].get(),
                 'expansion_ratio': self.state['zoomin_params']['expansion_ratio'].get()
             }
-            if self.state['zoomin_params']['fixed_crop'].get():
-                zoomin_params['target_size'] = (zoomin_params['target_size'], zoomin_params['target_size'])
         else:
             zoomin_params = None
 
@@ -365,7 +332,7 @@ class InteractiveDemoApp(ttk.Frame):
         self.canvas.focus_set()
 
         if self.image_on_canvas is None:
-            messagebox.showwarning("Warning", "Please load an image first")
+            messagebox.showwarning("Warning", "Please, load an image first")
             return
 
         if self._check_entry(self):
@@ -395,8 +362,6 @@ class InteractiveDemoApp(ttk.Frame):
         if self.state['brs_mode'].get() == 'NoBRS':
             self.net_clicks_entry.configure(state=tk.DISABLED)
             self.net_clicks_label.configure(state=tk.DISABLED)
-            self.lbfgs_iters_entry.configure(state=tk.DISABLED)
-            self.lbfgs_iters_label.configure(state=tk.DISABLED)
 
     def _check_entry(self, widget):
         all_checked = True
