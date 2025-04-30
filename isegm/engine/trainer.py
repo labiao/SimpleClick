@@ -195,9 +195,9 @@ class ISTrainer(object):
             else:
                 checkpoint_interval = self.checkpoint_interval
 
-            if epoch % checkpoint_interval == 0:
-                save_checkpoint(self.net, self.cfg.CHECKPOINTS_PATH, prefix=self.task_prefix,
-                                epoch=epoch, multi_gpu=self.cfg.multi_gpu)
+            # if epoch % checkpoint_interval == 0:
+            #     save_checkpoint(self.net, self.cfg.CHECKPOINTS_PATH, prefix=self.task_prefix,
+            #                     epoch=epoch, multi_gpu=self.cfg.multi_gpu)
 
         if hasattr(self, 'lr_scheduler'):
             self.lr_scheduler.step()
